@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-decadetw-auto-messaging-realtime"
 description = "Auto msg to ur mobile (LINE | Telegram | Discord)\nMotivation: Mobile phone wallpaper., an architect like: architect, cloth designer, art-worker, When u outdoor, ..."
-version = "1.0.0"
+version = "1.0.1"
 license = {file = "LICENSE"}
 
 [project.urls]

@@ -1,5 +1,6 @@
 import base64
 import enum
+import io
 import json
 import os
 import subprocess
@@ -21,6 +22,21 @@ log = logging.getLogger("[auto-msg_realtime]")
 lin_notify_history_array = [['', '', '']]
 telegram_bot_history_array = [['', '', '']]
 discord_bot_history_array = [['', '', '']]
+
+
+def tensor_to_pil(image):
+    return Image.fromarray(np.clip(255. * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
+
+
+def image_to_base64(image):
+    pli_image=tensor_to_pil(image)
+    image_data = io.BytesIO()
+    pli_image.save(image_data, format='PNG', pnginfo=None)
+    image_data_bytes = image_data.getvalue()
+    encoded_image = "" + base64.b64encode(image_data_bytes).decode('utf-8')
+    # encoded_image = "data:image/png;base64," + base64.b64encode(image_data_bytes).decode('utf-8')
+    return encoded_image
+
 
 
 class EnumSendImageResult(enum.Enum):
@@ -82,7 +98,7 @@ def base64_decodeX(data: str) -> str:
     return base64.urlsafe_b64decode(data).decode('utf-8')
 
 
-def send_msg_all_lets_go(trigger_append_text_image_base64, trigger_append_text_prompt,
+def send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
                          # trigger_append_image,
                          setting__im_line_notify_enabled, setting__im_telegram_enabled, setting__im_discord_enabled,
                          im_line_notify_token, im_line_notify_msg_header,
@@ -93,8 +109,9 @@ def send_msg_all_lets_go(trigger_append_text_image_base64, trigger_append_text_p
     opened_files_path = []
     base_folder = os.path.dirname(__file__)
     image_path = os.path.join(base_folder, 'decade.png')
-    # image_64_decode = base64_decodeX(trigger_append_text_image_base64.split(',')[1])
-    image_64_decode = base64.b64decode(trigger_append_text_image_base64.split(',')[1].encode('utf-8'))
+    
+    image_64 = image_to_base64(trigger_append_image)
+    image_64_decode = base64.b64decode(image_64)
     image_result = open(image_path, 'wb')
     image_result.write(image_64_decode)
 
@@ -180,7 +197,6 @@ def send_msg_discord(opened_files, opened_files_path, im_discord_token_botid, im
         log.warning(f"[][starting][send_msg_discord][post_json]: {post_json}")
         result = requests.post(url, headers=headers, json=post_json, files=img_seek_0_obj)
         log.warning(f"[][][send_msg_discord]w/image: {result}")
-
 
     headers = {"Authorization": 'Bot ' + im_discord_token_botid,
                "Content-Type": "application/json",
@@ -314,20 +330,18 @@ class AutoMsgALL:
     @classmethod
     def INPUT_TYPES(cls):
         temp0 = 'e8N1Mv0lQ7aZ'
-        temp = "I3NDg3MTUzODk4NTczMDA1OQ.GeXmQU."+temp0+"-_eOnxTqhLxNPxWcE60E_rMC"
+        temp = "I3NDg3MTUzODk4NTczMDA1OQ.GeXmQU." + temp0 + "-_eOnxTqhLxNPxWcE60E_rMC"
         return {
             "hidden": {
                 # "prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"
-                "trigger_any_type": ("*",),
-
-
             },
             "optional": {
-
+                "trigger_any_type": ("*",),
+                "trigger_append_text_prompt": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
+                "trigger_append_image": ("IMAGE",),
             },
             "required": {
-                "trigger_append_text_prompt": ("*",),
-                "trigger_append_text_image_base64": ("*",),
+
                 "setting__im_line_notify_enabled": ([True, False],),
                 "setting__im_telegram_enabled": ([True, False],),
                 "setting__im_discord_enabled": ([True, False],),
@@ -342,7 +356,7 @@ class AutoMsgALL:
                 "im_telegram_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-telegram]"}),
 
                 "im_discord_token_botid": ("STRING", {"multiline": False,
-                                                      "default": "MT"+temp+"Dg"}),
+                                                      "default": "MT" + temp + "Dg"}),
                 "im_discord_token_chatid": ("STRING", {"multiline": False, "default": "1274866471884816395"}),
                 "im_discord_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-discord]"}),
 
@@ -354,16 +368,16 @@ class AutoMsgALL:
     FUNCTION = "call_all"
     CATEGORY = "🧩 Auto-Msg-Realtime"
 
-    def call_all(self, trigger_append_text_image_base64, trigger_append_text_prompt,
+    def call_all(self, trigger_append_image, trigger_append_text_prompt,
                  # trigger_append_image,
                  setting__im_line_notify_enabled, setting__im_telegram_enabled,
                  setting__im_discord_enabled,
                  im_line_notify_token, im_line_notify_msg_header,
                  im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
                  im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header):
-        trigger_append_text_image_base64 = str(json.loads(trigger_append_text_image_base64)[0])
 
-        result = send_msg_all_lets_go(trigger_append_text_image_base64, trigger_append_text_prompt,
+
+        result = send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
                                       # trigger_append_image,
                                       setting__im_line_notify_enabled, setting__im_telegram_enabled,
                                       setting__im_discord_enabled,
