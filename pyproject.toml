@@ -9,6 +9,6 @@ Repository = "https://github.com/xlinx/ComfyUI-decadetw-auto-messaging-realtime"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "xxlinxx"
 DisplayName = "ComfyUI-decadetw-auto-messaging-realtime"
-Icon = ""
+Icon = "https://www.decade.tw/wp-content/uploads/2021/09/DECADE_new.png"
