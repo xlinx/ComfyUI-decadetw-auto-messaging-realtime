@@ -26,10 +26,10 @@ NODE_CLASS_MAPPINGS = {
     "Auto-MSG-Telegram-Bot": AutoMsgTelegram,
     "Auto-MSG-Discord-Bot":  AutoMsgDiscord,
 }
-# NODE_DISPLAY_NAME_MAPPINGS = {
-#     "Auto-MSG-ALL":           "💬 Auto-MSG-ALL",
-#     "Auto-MSG-Line-Notify":   "💬 Auto-MSG-Line-Notify",
-#     "Auto-MSG-Telegram-Bot":  "💬 Auto-MSG-Telegram-Bot",
-#     "Auto-MSG-Discord-Bot":   "💬 Auto-MSG-Discord-Bot"
-# }
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "Auto-MSG-ALL":           "💬 Auto-MSG-ALL",
+    "Auto-MSG-Line-Notify":   "💬 Auto-MSG-Line-Notify",
+    "Auto-MSG-Telegram-Bot":  "💬 Auto-MSG-Telegram-Bot",
+    "Auto-MSG-Discord-Bot":   "💬 Auto-MSG-Discord-Bot"
+}
 print("[0][Auto-Msg-Realtime][]")
