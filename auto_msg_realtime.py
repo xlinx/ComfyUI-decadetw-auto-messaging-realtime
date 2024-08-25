@@ -4,6 +4,7 @@ import io
 import json
 import os
 import subprocess
+import pprint
 import logging
 from base64 import b64encode, b64decode
 from datetime import datetime
@@ -29,14 +30,13 @@ def tensor_to_pil(image):
 
 
 def image_to_base64(image):
-    pli_image=tensor_to_pil(image)
+    pli_image = tensor_to_pil(image)
     image_data = io.BytesIO()
     pli_image.save(image_data, format='PNG', pnginfo=None)
     image_data_bytes = image_data.getvalue()
     encoded_image = "" + base64.b64encode(image_data_bytes).decode('utf-8')
     # encoded_image = "data:image/png;base64," + base64.b64encode(image_data_bytes).decode('utf-8')
     return encoded_image
-
 
 
 class EnumSendImageResult(enum.Enum):
@@ -98,18 +98,22 @@ def base64_decodeX(data: str) -> str:
     return base64.urlsafe_b64decode(data).decode('utf-8')
 
 
-def send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
-                         # trigger_append_image,
-                         setting__im_line_notify_enabled, setting__im_telegram_enabled, setting__im_discord_enabled,
+def send_msg_all_lets_go(trigger_any_type, trigger_append_image,
+                         enable_im_line_notify, enable_im_telegram, enable_im_discord,
                          im_line_notify_token, im_line_notify_msg_header,
                          im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
-                         im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header):
-    log.warning("[2][Auto-Msg][] " + im_line_notify_msg_header)
+                         im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header,
+                         prompt, extra_pnginfo,
+                         msg_png_info_enabled, msg_pos_prompt_enabled, msg_neg_prompt_enabled):
+    # pprint.pprint(prompt, width=1)
+    # pprint.pprint(extra_pnginfo, width=1)
+
+    log.warning("[][Auto-Msg][send_msg_all_lets_go]  extra_pnginfo="  )
     opened_files = []
     opened_files_path = []
     base_folder = os.path.dirname(__file__)
     image_path = os.path.join(base_folder, 'decade.png')
-    
+
     image_64 = image_to_base64(trigger_append_image)
     image_64_decode = base64.b64decode(image_64)
     image_result = open(image_path, 'wb')
@@ -119,20 +123,20 @@ def send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
     opened_files.append(image)
     opened_files_path.append(image_path)
 
-    im_line_notify_msg_header += '\n▣prompt:' + trigger_append_text_prompt
-    im_telegram_msg_header += '\n▣prompt:' + trigger_append_text_prompt
-    im_discord_msg_header += '\n▣prompt:' + trigger_append_text_prompt
+    im_line_notify_msg_header += '\n▣prompt:'+json.dumps(prompt)[:500]
+    im_telegram_msg_header += '\n▣prompt:'+json.dumps(prompt)[:500]
+    im_discord_msg_header += '\n▣prompt:'+json.dumps(prompt)[:500]
 
-    if setting__im_line_notify_enabled:
+    if enable_im_line_notify:
         result_line_notify = send_msg_linenotify(opened_files, im_line_notify_token, im_line_notify_msg_header)
         log.warning(f"[][send_msg_all][result_line_notify]: {result_line_notify}")
 
-    if setting__im_telegram_enabled:
+    if enable_im_telegram:
         result_telegram_bot = send_msg_telegram(opened_files, im_telegram_token_botid,
                                                 im_telegram_token_chatid,
                                                 im_telegram_msg_header)
         log.warning(f"[][send_msg_all][result_telegram_bot]: {result_telegram_bot}")
-    if setting__im_discord_enabled:
+    if enable_im_discord:
         result_discord_bot = send_msg_discord(opened_files, opened_files_path, im_discord_token_botid,
                                               im_discord_token_chatid,
                                               im_discord_msg_header)
@@ -140,9 +144,9 @@ def send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
 
     return {'setting': [lin_notify_history_array[0], telegram_bot_history_array[0],
                         discord_bot_history_array[0]],
-            'line': lin_notify_history_array,
-            'telegram': telegram_bot_history_array,
-            'discord': discord_bot_history_array}
+            'line': lin_notify_history_array[0],
+            'telegram': telegram_bot_history_array[0],
+            'discord': discord_bot_history_array[0]}
 
 
 def send_msg_discord(opened_files, opened_files_path, im_discord_token_botid, im_discord_token_chatid,
@@ -159,78 +163,61 @@ def send_msg_discord(opened_files, opened_files_path, im_discord_token_botid, im
 
     payload = {}
     result = ''
+    try:
+        if len(opened_files_path) > 0:
+            headers = {"Authorization": 'Bot ' + im_discord_token_botid,
+                       }
+            payload = {"content": im_discord_msg_header,  # https://discord.com/developers/docs/reference#uploading-files
+                       "message_reference": {
+                           "message_id": "233648473390448641"
+                       },
 
-    if len(opened_files_path) > 0:
+                       }
+            json_arr = []
+            img_seek_0_obj = {}
+            for index, img_path in enumerate(opened_files_path):
+                filename = os.path.basename(img_path)
+                opened_files[index].seek(0)
+                img_seek_0_obj[filename] = opened_files[index].read()
+                json_arr.append({
+                    "id": index,
+                    "description": filename,
+                    "filename": filename,
+                    "title": filename,
+                    "image": {
+                        # "url": "https://www.decade.tw/wp-content/uploads/2021/09/DECADE_new.png"
+                        "url": "attachment://" + filename
+                    },
+                    "thumbnail": {
+                        "url": "attachment://" + filename
+                    },
+
+                }
+                )
+
+            payload['attachments'] = json_arr
+            payload['embeds'] = json_arr
+            post_json = json.dumps(payload)
+            log.warning(f"[][starting][send_msg_discord][post_json]: {post_json}")
+            result = requests.post(url, headers=headers, json=post_json, files=img_seek_0_obj)
+            log.warning(f"[][][send_msg_discord]w/image: {result}")
+
         headers = {"Authorization": 'Bot ' + im_discord_token_botid,
+                   "Content-Type": "application/json",
+                   # "Content-Type": 'multipart/form-data'
+                   # "Content-Type": 'application/x-www-form-urlencoded'
                    }
-        payload = {"content": im_discord_msg_header,  # https://discord.com/developers/docs/reference#uploading-files
-                   "message_reference": {
-                       "message_id": "233648473390448641"
-                   },
-
-                   }
-        json_arr = []
-        img_seek_0_obj = {}
-        for index, img_path in enumerate(opened_files_path):
-            filename = os.path.basename(img_path)
-            opened_files[index].seek(0)
-            img_seek_0_obj[filename] = opened_files[index].read()
-            json_arr.append({
-                "id": index,
-                "description": filename,
-                "filename": filename,
-                "title": filename,
-                "image": {
-                    # "url": "https://www.decade.tw/wp-content/uploads/2021/09/DECADE_new.png"
-                    "url": "attachment://" + filename
-                },
-                "thumbnail": {
-                    "url": "attachment://" + filename
-                },
-
-            }
-            )
-
-        payload['attachments'] = json_arr
-        payload['embeds'] = json_arr
+        payload = {"content": im_discord_msg_header, "tts": 'false'}
         post_json = json.dumps(payload)
-        log.warning(f"[][starting][send_msg_discord][post_json]: {post_json}")
-        result = requests.post(url, headers=headers, json=post_json, files=img_seek_0_obj)
-        log.warning(f"[][][send_msg_discord]w/image: {result}")
-
-    headers = {"Authorization": 'Bot ' + im_discord_token_botid,
-               "Content-Type": "application/json",
-               # "Content-Type": 'multipart/form-data'
-               # "Content-Type": 'application/x-www-form-urlencoded'
-               }
-    payload = {"content": im_discord_msg_header, "tts": 'false'}
-    post_json = json.dumps(payload)
-    result = requests.post(url, headers=headers, data=post_json).text
-    # result = requests.post(url, headers=headers, data=data, files=imagefile)
-
-    # for index,img in enumerate(opened_files):
-    #     img.seek(0)
-    #     imagefile = {'imageFile': img}
-    #     headers = {"Content-Disposition": f"""form-data; name="files[{index}]"; filename="{opened_files_path[index]}" """,
-    #                "Content-Type": "image/png",
-    #                }
-    #     result = requests.post(url, headers=headers, data=post_json, files=imagefile)
-
-    headers = {"Authorization": 'Bot ' + im_discord_token_botid,
-               "Content-Type": "application/json",
-               # "Content-Type": 'multipart/form-data'
-               # "Content-Type": 'application/x-www-form-urlencoded'
-               }
-    payload = {"content": im_discord_msg_header, "tts": 'false'}
-    post_json = json.dumps(payload)
-    result = requests.post(url, headers=headers, data=post_json).text
-    # result = requests.post(url, headers=headers, data=data, files=imagefile)
-
+        result = requests.post(url, headers=headers, data=post_json).text
+        # result = requests.post(url, headers=headers, data=data, files=imagefile)
+    except Exception as e:
+        result = str(e)
     discord_bot_history_array.append(['', result, im_discord_msg_header])
     if len(discord_bot_history_array) > 3:
         discord_bot_history_array.remove(discord_bot_history_array[0])
 
-    return "", "", "", "",
+    return discord_bot_history_array
 
 
 def send_msg_linenotify(opened_files, im_line_notify_token, im_line_notify_msg_header):
@@ -248,22 +235,26 @@ def send_msg_linenotify(opened_files, im_line_notify_token, im_line_notify_msg_h
         'message': im_line_notify_msg_header
     }
     result = ''
-    if len(opened_files) > 0:
-        for img in opened_files:
-            img.seek(0)
-            imagefile = {'imageFile': img}
-            result = requests.post(url, headers=headers, data=data, files=imagefile)
-            log.warning(f"[][][send_msg_linenotify]w/image: {result}")
+    try:
+        if len(opened_files) > 0:
+            for img in opened_files:
+                img.seek(0)
+                imagefile = {'imageFile': img}
+                result = requests.post(url, headers=headers, data=data, files=imagefile)
+                log.warning(f"[][][send_msg_linenotify]w/image: {result}")
 
-    else:
-        result = requests.post(url, headers=headers, data=data)
-        log.warning(f"[][][send_msg_linenotify]w/text: {result}")
+        else:
+            result = requests.post(url, headers=headers, data=data)
+            log.warning(f"[][][send_msg_linenotify]w/text: {result}")
+        result = str(result.text)
+    except Exception as e:
+        result = str(e)
 
-    result = str(result.text)
     lin_notify_history_array.append(['', result, im_line_notify_msg_header])
     if len(lin_notify_history_array) > 3:
         lin_notify_history_array.remove(lin_notify_history_array[0])
     return lin_notify_history_array
+
 
 
 def send_msg_telegram(opened_files, im_telegram_token_botid, im_telegram_token_chatid,
@@ -291,102 +282,316 @@ def send_msg_telegram(opened_files, im_telegram_token_botid, im_telegram_token_c
     headers = {'Content-Type': 'application/json', "cache-control": "no-cache"}
     result = ''
     # API ref: https://core.telegram.org/bots/api#sendphoto
-    if len(opened_files) > 0:
-        url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendPhoto'
-        data = {"chat_id": im_telegram_token_chatid, "caption": im_telegram_msg_header}
-        for img in opened_files:
-            img.seek(0)
-            imagefile = {'photo': img}
-            # result = requests.post(url, headers=headers, data=json.dumps(data), files=imagefile)
-            result = requests.post(url, params=data, files=imagefile)
-            log.warning(f"[][][send_msg_telegram]w/image: {result}")
-        if len(ori_str) > 800:
-            url2 = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage'
-            data2 = {"chat_id": im_telegram_token_chatid, "text": ori_str}
-            log.warning(f"[][][send_msg_telegram]data: {data2}")
-            result2 = requests.post(url2, params=data2)
-            log.warning(f"[][][send_msg_telegram]w/text: {result2}")
+    try:
+        if len(opened_files) > 0:
+            url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendPhoto'
+            data = {"chat_id": im_telegram_token_chatid, "caption": im_telegram_msg_header}
+            for img in opened_files:
+                img.seek(0)
+                imagefile = {'photo': img}
+                # result = requests.post(url, headers=headers, data=json.dumps(data), files=imagefile)
+                result = requests.post(url, params=data, files=imagefile)
+                log.warning(f"[][][send_msg_telegram]w/image: {result}")
+            if len(ori_str) > 800:
+                url2 = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage'
+                data2 = {"chat_id": im_telegram_token_chatid, "text": ori_str}
+                log.warning(f"[][][send_msg_telegram]data: {data2}")
+                result2 = requests.post(url2, params=data2)
+                log.warning(f"[][][send_msg_telegram]w/text: {result2}")
 
-    else:
-        # url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage?chat_id={im_telegram_token_chatid}&text={im_telegram_msg_header}'
-        # result = requests.get(url)
-        url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage'
-        data = {"chat_id": im_telegram_token_chatid, "text": im_telegram_msg_header}
-        log.warning(f"[][][send_msg_telegram]data: {data}")
-        # result = requests.post(url, headers=headers, data=data, json=json.dumps(data))
-        result = requests.post(url, params=data)
-        log.warning(f"[][][send_msg_telegram]w/text: {result}")
+        else:
+            # url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage?chat_id={im_telegram_token_chatid}&text={im_telegram_msg_header}'
+            # result = requests.get(url)
+            url = f'https://api.telegram.org/bot{im_telegram_token_botid}/sendMessage'
+            data = {"chat_id": im_telegram_token_chatid, "text": im_telegram_msg_header}
+            log.warning(f"[][][send_msg_telegram]data: {data}")
+            # result = requests.post(url, headers=headers, data=data, json=json.dumps(data))
+            result = requests.post(url, params=data)
+            log.warning(f"[][][send_msg_telegram]w/text: {result}")
 
-    result = str(result.text)
+        result = str(result.text)
+    except Exception as e:
+        result = str(e)
     telegram_bot_history_array.append(['', result, im_telegram_msg_header])
     if len(telegram_bot_history_array) > 3:
         telegram_bot_history_array.remove(telegram_bot_history_array[0])
     log.warning(f"[][][send_msg_telegram]: {result}")
     return telegram_bot_history_array
 
-
-class AutoMsgALL:
+class AutoMsgLINE:
 
     @classmethod
     def INPUT_TYPES(cls):
-        temp0 = 'e8N1Mv0lQ7aZ'
-        temp = "I3NDg3MTUzODk4NTczMDA1OQ.GeXmQU." + temp0 + "-_eOnxTqhLxNPxWcE60E_rMC"
         return {
             "hidden": {
-                # "prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+                "enable_im_discord": ([True, False],),
+                "im_discord_token_botid": ("STRING", {"multiline": False,
+                                                      "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_discord_token_chatid": ("STRING", {"multiline": False, "default": "1274866471884816395"}),
+                "im_discord_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-discord]"}),
+                "enable_im_telegram": ([True, False],),
+                "im_telegram_token_botid": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_telegram_token_chatid": ("STRING", {"multiline": False, "default": "1967680189"}),
+                "im_telegram_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-telegram]"}),
             },
             "optional": {
                 "trigger_any_type": ("*",),
-                "trigger_append_text_prompt": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
                 "trigger_append_image": ("IMAGE",),
             },
             "required": {
 
-                "setting__im_line_notify_enabled": ([True, False],),
-                "setting__im_telegram_enabled": ([True, False],),
-                "setting__im_discord_enabled": ([True, False],),
 
+                "enable_im_line_notify": ([True, False],),
+                "msg_png_info_enabled": ([True, False],),
+                "msg_pos_prompt_enabled": ([True, False],),
+                "msg_neg_prompt_enabled": ([True, False],),
                 "im_line_notify_token": (
-                    "STRING", {"multiline": False, "default": "tcnDSnAR6Gl6pTMBfQ4wOxqtq0eSyXqqJ9Q1Hck4dRO"}),
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_line_notify_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
+            }
+        }
+
+    RETURN_TYPES = ("*", "IMAGE", "STRING", "STRING", "STRING",)
+    RETURN_NAMES = (
+    "output-original-input", "output-original-input-IMAGE", "🌀output-text-LINE", "🌀output-text-Telegram",
+    "🌀output-text-Discord",)
+    FUNCTION = "call_all"
+    CATEGORY = "🧩 Auto-Msg-Realtime"
+
+    def call_all(self, trigger_any_type=None, trigger_append_image=None,
+                 enable_im_line_notify=False, enable_im_telegram=False,
+                 enable_im_discord=False,
+                 im_line_notify_token='xxx', im_line_notify_msg_header='xxx',
+                 im_telegram_token_botid='xxx', im_telegram_token_chatid='xxx', im_telegram_msg_header='xxx',
+                 im_discord_token_botid='xxx', im_discord_token_chatid='xxx', im_discord_msg_header='xxx',
+                 prompt=None, extra_pnginfo=None,
+                 msg_png_info_enabled=False, msg_pos_prompt_enabled=False, msg_neg_prompt_enabled=False):
+        # enable_im_line_notify = False
+        # enable_im_telegram = False
+        # enable_im_discord = False
+        result = send_msg_all_lets_go(trigger_any_type, trigger_append_image,
+                                      enable_im_line_notify, enable_im_telegram,
+                                      enable_im_discord,
+                                      im_line_notify_token, im_line_notify_msg_header,
+                                      im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
+                                      im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header,
+                                      prompt, extra_pnginfo,
+                                      msg_png_info_enabled, msg_pos_prompt_enabled, msg_neg_prompt_enabled)
+        log.warning("[9][AutoMsgLINE][]" + im_line_notify_msg_header)
+
+        return trigger_any_type,trigger_append_image, result.get('line'), result.get('telegram'), result.get('discord'),
+
+class AutoMsgTelegram:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+                "enable_im_line_notify": ([True, False],),
+                "im_line_notify_token": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_line_notify_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
+                "enable_im_discord": ([True, False],),
+                "im_discord_token_botid": ("STRING", {"multiline": False,
+                                                      "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_discord_token_chatid": ("STRING", {"multiline": False, "default": "1274866471884816395"}),
+                "im_discord_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-discord]"}),
+            },
+            "optional": {
+                "trigger_any_type": ("*",),
+                "trigger_append_image": ("IMAGE",),
+            },
+            "required": {
+
+
+                "enable_im_telegram": ([True, False],),
+                "msg_png_info_enabled": ([True, False],),
+                "msg_pos_prompt_enabled": ([True, False],),
+                "msg_neg_prompt_enabled": ([True, False],),
+                "im_telegram_token_botid": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_telegram_token_chatid": ("STRING", {"multiline": False, "default": "1967680189"}),
+                "im_telegram_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-telegram]"}),
+            }
+        }
+
+    RETURN_TYPES = ("*", "IMAGE", "STRING", "STRING", "STRING",)
+    RETURN_NAMES = (
+    "output-original-input", "output-original-input-IMAGE", "🌀output-text-LINE", "🌀output-text-Telegram",
+    "🌀output-text-Discord",)
+    FUNCTION = "call_all"
+    CATEGORY = "🧩 Auto-Msg-Realtime"
+
+    def call_all(self, trigger_any_type=None, trigger_append_image=None,
+                 enable_im_line_notify=False, enable_im_telegram=False,
+                 enable_im_discord=False,
+                 im_line_notify_token='xxx', im_line_notify_msg_header='xxx',
+                 im_telegram_token_botid='xxx', im_telegram_token_chatid='xxx', im_telegram_msg_header='xxx',
+                 im_discord_token_botid='xxx', im_discord_token_chatid='xxx', im_discord_msg_header='xxx',
+                 prompt=None, extra_pnginfo=None,
+                 msg_png_info_enabled=False, msg_pos_prompt_enabled=False, msg_neg_prompt_enabled=False):
+        # enable_im_line_notify = False
+        # enable_im_telegram = False
+        # enable_im_discord = False
+        result = send_msg_all_lets_go(trigger_any_type, trigger_append_image,
+                                      enable_im_line_notify, enable_im_telegram,
+                                      enable_im_discord,
+                                      im_line_notify_token, im_line_notify_msg_header,
+                                      im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
+                                      im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header,
+                                      prompt, extra_pnginfo,
+                                      msg_png_info_enabled, msg_pos_prompt_enabled, msg_neg_prompt_enabled)
+        log.warning("[9][AutoMsgTelegram][]" + im_line_notify_msg_header)
+
+        return trigger_any_type,trigger_append_image, result.get('line'), result.get('telegram'), result.get('discord'),
+
+class AutoMsgDiscord:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+                "enable_im_line_notify": ([True, False],),
+                "enable_im_telegram": ([True, False],),
+                "im_line_notify_token": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
                 "im_line_notify_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
 
                 "im_telegram_token_botid": (
-                    "STRING", {"multiline": False, "default": "7376923093:AAGtCtd9Ogiq9yT1IBsbRD6ENQ5DbAqL6Ig"}),
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
                 "im_telegram_token_chatid": ("STRING", {"multiline": False, "default": "1967680189"}),
                 "im_telegram_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-telegram]"}),
+            },
+            "optional": {
+                "trigger_any_type": ("*",),
+                "trigger_append_image": ("IMAGE",),
+            },
+            "required": {
+
+
+                "enable_im_discord": ([True, False],),
+
+                "msg_png_info_enabled": ([True, False],),
+                "msg_pos_prompt_enabled": ([True, False],),
+                "msg_neg_prompt_enabled": ([True, False],),
+
+
 
                 "im_discord_token_botid": ("STRING", {"multiline": False,
-                                                      "default": "MT" + temp + "Dg"}),
+                                                      "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
                 "im_discord_token_chatid": ("STRING", {"multiline": False, "default": "1274866471884816395"}),
                 "im_discord_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-discord]"}),
 
             }
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
-    RETURN_NAMES = ("output-original-input", "🌀output-text-LINE", "🌀output-text-Telegram", "🌀output-text-Discord",)
+    RETURN_TYPES = ("*", "IMAGE", "STRING", "STRING", "STRING",)
+    RETURN_NAMES = (
+    "output-original-input", "output-original-input-IMAGE", "🌀output-text-LINE", "🌀output-text-Telegram",
+    "🌀output-text-Discord",)
     FUNCTION = "call_all"
     CATEGORY = "🧩 Auto-Msg-Realtime"
 
-    def call_all(self, trigger_append_image, trigger_append_text_prompt,
-                 # trigger_append_image,
-                 setting__im_line_notify_enabled, setting__im_telegram_enabled,
-                 setting__im_discord_enabled,
-                 im_line_notify_token, im_line_notify_msg_header,
-                 im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
-                 im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header):
-
-
-        result = send_msg_all_lets_go(trigger_append_image, trigger_append_text_prompt,
-                                      # trigger_append_image,
-                                      setting__im_line_notify_enabled, setting__im_telegram_enabled,
-                                      setting__im_discord_enabled,
+    def call_all(self, trigger_any_type=None, trigger_append_image=None,
+                 enable_im_line_notify=False, enable_im_telegram=False,
+                 enable_im_discord=False,
+                 im_line_notify_token='xxx', im_line_notify_msg_header='xxx',
+                 im_telegram_token_botid='xxx', im_telegram_token_chatid='xxx', im_telegram_msg_header='xxx',
+                 im_discord_token_botid='xxx', im_discord_token_chatid='xxx', im_discord_msg_header='xxx',
+                 prompt=None, extra_pnginfo=None,
+                 msg_png_info_enabled=False, msg_pos_prompt_enabled=False, msg_neg_prompt_enabled=False):
+        # enable_im_line_notify = False
+        # enable_im_telegram = False
+        # enable_im_discord = False
+        result = send_msg_all_lets_go(trigger_any_type, trigger_append_image,
+                                      enable_im_line_notify, enable_im_telegram,
+                                      enable_im_discord,
                                       im_line_notify_token, im_line_notify_msg_header,
                                       im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
-                                      im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header)
-        log.warning("[9][Auto-Msg][]" + im_line_notify_msg_header)
+                                      im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header,
+                                      prompt, extra_pnginfo,
+                                      msg_png_info_enabled, msg_pos_prompt_enabled, msg_neg_prompt_enabled)
+        log.warning("[9][AutoMsgDiscord][]" + im_line_notify_msg_header)
 
-        return '', im_line_notify_msg_header, im_telegram_msg_header, im_discord_msg_header,
+        return trigger_any_type,trigger_append_image, result.get('line'), result.get('telegram'), result.get('discord'),
+
+
+class AutoMsgALL:
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+
+            },
+            "optional": {
+                "trigger_any_type": ("*",),
+
+                "trigger_append_image": ("IMAGE",),
+            },
+            "required": {
+
+                "enable_im_line_notify": ([True, False],),
+                "enable_im_telegram": ([True, False],),
+                "enable_im_discord": ([True, False],),
+
+                "msg_png_info_enabled": ([True, False],),
+                "msg_pos_prompt_enabled": ([True, False],),
+                "msg_neg_prompt_enabled": ([True, False],),
+
+                "im_line_notify_token": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_line_notify_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-line]"}),
+
+                "im_telegram_token_botid": (
+                    "STRING", {"multiline": False, "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_telegram_token_chatid": ("STRING", {"multiline": False, "default": "1967680189"}),
+                "im_telegram_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-telegram]"}),
+
+                "im_discord_token_botid": ("STRING", {"multiline": False,
+                                                      "default": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}),
+                "im_discord_token_chatid": ("STRING", {"multiline": False, "default": "1274866471884816395"}),
+                "im_discord_msg_header": ("STRING", {"multiline": True, "default": "[from-ComfyUI-discord]"}),
+
+            }
+        }
+
+    RETURN_TYPES = ("*", "IMAGE", "STRING", "STRING", "STRING",)
+    RETURN_NAMES = ("output-original-input", "output-original-input-IMAGE","🌀output-text-LINE", "🌀output-text-Telegram", "🌀output-text-Discord",)
+    FUNCTION = "call_all"
+    CATEGORY = "🧩 Auto-Msg-Realtime"
+
+    def call_all(self, trigger_any_type=None, trigger_append_image=None,
+                 enable_im_line_notify=False, enable_im_telegram=False,
+                 enable_im_discord=False,
+                 im_line_notify_token='xxx', im_line_notify_msg_header='xxx',
+                 im_telegram_token_botid='xxx', im_telegram_token_chatid='xxx', im_telegram_msg_header='xxx',
+                 im_discord_token_botid='xxx', im_discord_token_chatid='xxx', im_discord_msg_header='xxx',
+                 prompt=None, extra_pnginfo=None,
+                 msg_png_info_enabled=False, msg_pos_prompt_enabled=False, msg_neg_prompt_enabled=False):
+        # enable_im_line_notify = False
+        # enable_im_telegram = False
+        # enable_im_discord = False
+        result = send_msg_all_lets_go(trigger_any_type,trigger_append_image,
+                                      enable_im_line_notify, enable_im_telegram,
+                                      enable_im_discord,
+                                      im_line_notify_token, im_line_notify_msg_header,
+                                      im_telegram_token_botid, im_telegram_token_chatid, im_telegram_msg_header,
+                                      im_discord_token_botid, im_discord_token_chatid, im_discord_msg_header,
+                                      prompt, extra_pnginfo,
+                                      msg_png_info_enabled, msg_pos_prompt_enabled, msg_neg_prompt_enabled)
+        log.warning("[9][AutoMsgALL][]" + im_line_notify_msg_header)
+
+        return trigger_any_type,trigger_append_image, result.get('line'), result.get('telegram'), result.get('discord'),
 
     # def __init__(self):
     #     up_2_level_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))

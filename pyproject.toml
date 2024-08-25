@@ -1,8 +1,8 @@
 [project]
 name = "comfyui-decadetw-auto-messaging-realtime"
 description = "Auto msg to ur mobile (LINE | Telegram | Discord)\nMotivation: Mobile phone wallpaper., an architect like: architect, cloth designer, art-worker, When u outdoor, ..."
-version = "1.0.1"
-license = {file = "LICENSE"}
+version = "1.20240825.2"
+license = {text = "MIT License"}
 
 [project.urls]
 Repository = "https://github.com/xlinx/ComfyUI-decadetw-auto-messaging-realtime"
@@ -11,4 +11,4 @@ Repository = "https://github.com/xlinx/ComfyUI-decadetw-auto-messaging-realtime"
 [tool.comfy]
 PublisherId = "xxlinxx"
 DisplayName = "ComfyUI-decadetw-auto-messaging-realtime"
-Icon = "https://www.decade.tw/wp-content/uploads/2021/09/DECADE_new.png"
+Icon = "https://www.decade.tw/wp-content/uploads/2021/09/cropped-DECADE512-150x150.png"

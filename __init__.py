@@ -22,9 +22,9 @@ from .auto_msg_realtime import *
 
 NODE_CLASS_MAPPINGS = {
     "Auto-MSG-ALL":          AutoMsgALL,
-    "Auto-MSG-Line-Notify":  AutoMsgALL,
-    "Auto-MSG-Telegram-Bot": AutoMsgALL,
-    "Auto-MSG-Discord-Bot":  AutoMsgALL,
+    "Auto-MSG-Line-Notify":  AutoMsgLINE,
+    "Auto-MSG-Telegram-Bot": AutoMsgTelegram,
+    "Auto-MSG-Discord-Bot":  AutoMsgDiscord,
 }
 # NODE_DISPLAY_NAME_MAPPINGS = {
 #     "Auto-MSG-ALL":           "💬 Auto-MSG-ALL",
